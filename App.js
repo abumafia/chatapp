@@ -897,3 +897,128 @@ function App() {
 }
 
 export default App;
+
+import React, { useState, useEffect } from "react";
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:5000");
+
+function App() {
+  const [username, setUsername] = useState("");
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [group, setGroup] = useState("General");
+  const [darkMode, setDarkMode] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [groups, setGroups] = useState(["General"]);
+  const [channels, setChannels] = useState([]);
+  const [newChannel, setNewChannel] = useState("");
+
+  useEffect(() => {
+    socket.emit("joinChannel", group);
+
+    socket.on("loadChannelMessages", (msgs) => {
+      setMessages(msgs);
+    });
+
+    socket.on("receiveMessage", (msg) => {
+      setMessages((prev) => [...prev, msg]);
+    });
+
+    socket.on("updateUsers", (onlineUsers) => {
+      setUsers(onlineUsers);
+    });
+
+    socket.on("updateChannels", (channelList) => {
+      setChannels(channelList);
+    });
+
+    return () => {
+      socket.off("loadChannelMessages");
+      socket.off("receiveMessage");
+      socket.off("updateUsers");
+      socket.off("updateChannels");
+    };
+  }, [group]);
+
+  const sendMessage = () => {
+    if (message.trim()) {
+      socket.emit("sendMessage", { group, message, type: "text", media: null });
+      setMessage("");
+    }
+  };
+
+  const createChannel = () => {
+    if (newChannel.trim() && !channels.includes(newChannel)) {
+      socket.emit("createChannel", { name: newChannel, admin: username });
+      setNewChannel("");
+    }
+  };
+
+  return (
+    <div
+      style={{
+        textAlign: "center",
+        padding: "20px",
+        background: darkMode ? "#222" : "#fff",
+        color: darkMode ? "#fff" : "#000",
+        height: "100vh",
+      }}
+    >
+      <h2>💬 Chat</h2>
+
+      <div>
+        <input
+          type="text"
+          placeholder="Ismingiz"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+        />
+        <button onClick={() => socket.emit("updateProfile", { username })}>
+          🔄 Yangilash
+        </button>
+      </div>
+
+      <h3>📂 Kanallar:</h3>
+      <ul>
+        {channels.map((ch, index) => (
+          <li key={index}>
+            <button onClick={() => setGroup(ch)}>{ch}</button>
+          </li>
+        ))}
+      </ul>
+
+      <input
+        type="text"
+        placeholder="Yangi kanal nomi..."
+        value={newChannel}
+        onChange={(e) => setNewChannel(e.target.value)}
+      />
+      <button onClick={createChannel}>➕ Kanal yaratish</button>
+
+      <div style={{ height: "300px", overflowY: "auto", background: "#f1f1f1" }}>
+        {messages.map((msg) => (
+          <div key={msg.id} style={{ margin: "5px", padding: "10px", background: "#fff" }}>
+            <strong>{msg.user.username}:</strong> {msg.message}
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <input
+          type="text"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Xabar yozing..."
+        />
+        <button onClick={sendMessage}>📤 Yuborish</button>
+      </div>
+
+      <button onClick={() => setDarkMode(!darkMode)}>
+        {darkMode ? "🌞 Light Mode" : "🌙 Dark Mode"}
+      </button>
+    </div>
+  );
+}
+
+export default App;
