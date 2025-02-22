@@ -540,3 +540,92 @@ io.on("connection", (socket) => {
 server.listen(5000, () => {
   console.log("🔥 Server 5000-portda ishlamoqda...");
 });
+
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
+
+app.use(cors());
+app.use(express.json());
+
+const users = {};
+const messages = {};
+const groups = { General: { members: [], type: "group" } };
+const channels = {};
+
+io.on("connection", (socket) => {
+  console.log(`🔗 Foydalanuvchi ulandi: ${socket.id}`);
+
+  socket.on("updateProfile", (profile) => {
+    users[socket.id] = { ...profile, status: "online", isAdmin: false };
+    io.emit("updateUsers", Object.values(users));
+  });
+
+  socket.on("createChannel", ({ name, admin }) => {
+    if (!channels[name]) {
+      channels[name] = { admin, members: [admin], messages: [] };
+      io.emit("updateChannels", Object.keys(channels));
+    }
+  });
+
+  socket.on("joinChannel", ({ channel, username }) => {
+    if (channels[channel] && !channels[channel].members.includes(username)) {
+      channels[channel].members.push(username);
+      socket.join(channel);
+      socket.emit("loadChannelMessages", channels[channel].messages);
+    }
+  });
+
+  socket.on("removeUser", ({ channel, username }) => {
+    if (channels[channel] && channels[channel].admin === users[socket.id]?.username) {
+      channels[channel].members = channels[channel].members.filter((user) => user !== username);
+      io.emit("updateChannelMembers", { channel, members: channels[channel].members });
+    }
+  });
+
+  socket.on("sendMessage", ({ group, message, type, media }) => {
+    const user = users[socket.id] || { username: "Anonim", avatar: "" };
+
+    if (channels[group] && channels[group].admin !== user.username) {
+      return; 
+    }
+
+    const msgData = { id: Date.now(), user, message, type, media };
+
+    if (channels[group]) {
+      channels[group].messages.push(msgData);
+      io.to(group).emit("receiveMessage", msgData);
+    } else {
+      groups[group].messages.push(msgData);
+      io.to(group).emit("receiveMessage", msgData);
+    }
+  });
+
+  socket.on("deleteMessage", ({ group, messageId }) => {
+    if (channels[group] && channels[group].admin === users[socket.id]?.username) {
+      channels[group].messages = channels[group].messages.filter((msg) => msg.id !== messageId);
+      io.to(group).emit("updateMessages", channels[group].messages);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    if (users[socket.id]) {
+      users[socket.id].status = "offline";
+      io.emit("updateUsers", Object.values(users));
+    }
+    delete users[socket.id];
+  });
+});
+
+server.listen(5000, () => {
+  console.log("🔥 Server 5000-portda ishlamoqda...");
+});
