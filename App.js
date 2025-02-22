@@ -503,3 +503,150 @@ function App() {
 }
 
 export default App;
+
+import React, { useState, useEffect } from "react";
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:5000");
+
+function App() {
+  const [username, setUsername] = useState("");
+  const [avatar, setAvatar] = useState("");
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [room, setRoom] = useState("General");
+  const [darkMode, setDarkMode] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [newText, setNewText] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  useEffect(() => {
+    socket.emit("joinRoom", room);
+
+    socket.on("receiveMessage", (msg) => {
+      setMessages((prev) => [...prev, msg]);
+    });
+
+    socket.on("messageDeleted", (id) => {
+      setMessages((prev) => prev.filter((msg) => msg.id !== id));
+    });
+
+    socket.on("messageEdited", ({ messageId, newText }) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, message: newText } : msg
+        )
+      );
+    });
+
+    return () => {
+      socket.off("receiveMessage");
+      socket.off("messageDeleted");
+      socket.off("messageEdited");
+    };
+  }, [room]);
+
+  const sendMessage = () => {
+    if (message.trim() || selectedFile) {
+      const fileData = selectedFile ? URL.createObjectURL(selectedFile) : null;
+      socket.emit("sendMessage", {
+        room,
+        message,
+        type: selectedFile ? "file" : "text",
+        media: fileData,
+      });
+      setMessage("");
+      setSelectedFile(null);
+    }
+  };
+
+  const deleteMessage = (id) => {
+    socket.emit("deleteMessage", { room, messageId: id });
+  };
+
+  const startEditing = (id, text) => {
+    setEditingMessageId(id);
+    setNewText(text);
+  };
+
+  const editMessage = () => {
+    socket.emit("editMessage", {
+      room,
+      messageId: editingMessageId,
+      newText,
+    });
+    setEditingMessageId(null);
+    setNewText("");
+  };
+
+  return (
+    <div
+      style={{
+        textAlign: "center",
+        padding: "20px",
+        background: darkMode ? "#222" : "#fff",
+        color: darkMode ? "#fff" : "#000",
+        height: "100vh",
+      }}
+    >
+      <h2>💬 Chat</h2>
+
+      <div>
+        <input
+          type="text"
+          placeholder="Ismingiz"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+        />
+        <button onClick={() => socket.emit("updateProfile", { username })}>
+          🔄 Yangilash
+        </button>
+      </div>
+
+      <div style={{ height: "300px", overflowY: "auto", background: "#f1f1f1" }}>
+        {messages.map((msg) => (
+          <div key={msg.id} style={{ margin: "5px", padding: "10px", background: "#fff" }}>
+            <strong>{msg.user.username}:</strong>{" "}
+            {msg.type === "file" ? (
+              <a href={msg.media} target="_blank" rel="noopener noreferrer">
+                📂 Fayl
+              </a>
+            ) : (
+              msg.message
+            )}
+            <button onClick={() => deleteMessage(msg.id)}>🗑</button>
+            <button onClick={() => startEditing(msg.id, msg.message)}>✏</button>
+          </div>
+        ))}
+      </div>
+
+      {editingMessageId ? (
+        <div>
+          <input
+            type="text"
+            value={newText}
+            onChange={(e) => setNewText(e.target.value)}
+          />
+          <button onClick={editMessage}>✅ Saqlash</button>
+        </div>
+      ) : (
+        <div>
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Xabar yozing..."
+          />
+          <input type="file" onChange={(e) => setSelectedFile(e.target.files[0])} />
+          <button onClick={sendMessage}>📤 Yuborish</button>
+        </div>
+      )}
+
+      <button onClick={() => setDarkMode(!darkMode)}>
+        {darkMode ? "🌞 Light Mode" : "🌙 Dark Mode"}
+      </button>
+    </div>
+  );
+}
+
+export default App;
