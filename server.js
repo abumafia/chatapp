@@ -390,3 +390,72 @@ io.on("connection", (socket) => {
 server.listen(5000, () => {
   console.log("🔥 Server 5000-portda ishlamoqda...");
 });
+
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
+
+app.use(cors());
+app.use(express.json());
+
+const users = {};
+const messages = {};
+const groups = { General: { members: [] } };
+
+io.on("connection", (socket) => {
+  console.log(`🔗 Foydalanuvchi ulandi: ${socket.id}`);
+
+  socket.on("updateProfile", (profile) => {
+    users[socket.id] = { ...profile, status: "online" };
+    io.emit("updateUsers", Object.values(users));
+  });
+
+  socket.on("joinGroup", (group) => {
+    if (!groups[group]) {
+      groups[group] = { members: [], messages: [] };
+    }
+    groups[group].members.push(socket.id);
+    socket.join(group);
+    socket.emit("loadMessages", groups[group].messages);
+    io.emit("updateGroups", Object.keys(groups));
+  });
+
+  socket.on("sendMessage", ({ group, message, type, media }) => {
+    const user = users[socket.id] || { username: "Anonim", avatar: "" };
+    const msgData = {
+      id: Date.now(),
+      user,
+      message,
+      type,
+      media,
+    };
+    groups[group].messages.push(msgData);
+    io.to(group).emit("receiveMessage", msgData);
+  });
+
+  socket.on("deleteMessage", ({ group, messageId }) => {
+    groups[group].messages = groups[group].messages.filter((msg) => msg.id !== messageId);
+    io.to(group).emit("messageDeleted", messageId);
+  });
+
+  socket.on("disconnect", () => {
+    if (users[socket.id]) {
+      users[socket.id].status = "offline";
+      io.emit("updateUsers", Object.values(users));
+    }
+    delete users[socket.id];
+  });
+});
+
+server.listen(5000, () => {
+  console.log("🔥 Server 5000-portda ishlamoqda...");
+});
