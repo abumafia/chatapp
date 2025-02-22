@@ -650,3 +650,110 @@ function App() {
 }
 
 export default App;
+
+import React, { useState, useEffect } from "react";
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:5000");
+
+function App() {
+  const [username, setUsername] = useState("");
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [room, setRoom] = useState("General");
+  const [darkMode, setDarkMode] = useState(false);
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    socket.emit("joinRoom", room);
+
+    socket.on("loadMessages", (msgs) => {
+      setMessages(msgs);
+    });
+
+    socket.on("receiveMessage", (msg) => {
+      setMessages((prev) => [...prev, msg]);
+    });
+
+    socket.on("messageDeleted", (id) => {
+      setMessages((prev) => prev.filter((msg) => msg.id !== id));
+    });
+
+    socket.on("updateUsers", (onlineUsers) => {
+      setUsers(onlineUsers);
+    });
+
+    return () => {
+      socket.off("loadMessages");
+      socket.off("receiveMessage");
+      socket.off("messageDeleted");
+      socket.off("updateUsers");
+    };
+  }, [room]);
+
+  const sendMessage = () => {
+    if (message.trim()) {
+      socket.emit("sendMessage", { room, message, type: "text", media: null });
+      setMessage("");
+    }
+  };
+
+  return (
+    <div
+      style={{
+        textAlign: "center",
+        padding: "20px",
+        background: darkMode ? "#222" : "#fff",
+        color: darkMode ? "#fff" : "#000",
+        height: "100vh",
+      }}
+    >
+      <h2>💬 Chat</h2>
+
+      <div>
+        <input
+          type="text"
+          placeholder="Ismingiz"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+        />
+        <button onClick={() => socket.emit("updateProfile", { username })}>
+          🔄 Yangilash
+        </button>
+      </div>
+
+      <h3>🟢 Onlayn foydalanuvchilar:</h3>
+      <ul>
+        {users.map((user, index) => (
+          <li key={index}>
+            {user.username} ({user.status === "online" ? "🟢 Online" : "🔴 Offline"})
+          </li>
+        ))}
+      </ul>
+
+      <div style={{ height: "300px", overflowY: "auto", background: "#f1f1f1" }}>
+        {messages.map((msg) => (
+          <div key={msg.id} style={{ margin: "5px", padding: "10px", background: "#fff" }}>
+            <strong>{msg.user.username}:</strong> {msg.message}
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <input
+          type="text"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Xabar yozing..."
+        />
+        <button onClick={sendMessage}>📤 Yuborish</button>
+      </div>
+
+      <button onClick={() => setDarkMode(!darkMode)}>
+        {darkMode ? "🌞 Light Mode" : "🌙 Dark Mode"}
+      </button>
+    </div>
+  );
+}
+
+export default App;
