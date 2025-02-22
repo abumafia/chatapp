@@ -1230,3 +1230,120 @@ function App() {
 }
 
 export default App;
+
+import React, { useState, useEffect } from "react";
+import { io } from "socket.io-client";
+import axios from "axios";
+
+const socket = io("http://localhost:5000");
+
+function App() {
+  const [username, setUsername] = useState("");
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [file, setFile] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [editText, setEditText] = useState("");
+
+  useEffect(() => {
+    socket.on("receiveMessage", (msg) => setMessages((prev) => [...prev, msg]));
+    socket.on("deleteMessage", (id) => setMessages((prev) => prev.filter((msg) => msg.id !== id)));
+    socket.on("editMessage", (updatedMsg) =>
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === updatedMsg.id ? updatedMsg : msg))
+      )
+    );
+
+    return () => {
+      socket.off("receiveMessage");
+      socket.off("deleteMessage");
+      socket.off("editMessage");
+    };
+  }, []);
+
+  const sendMessage = async () => {
+    let fileUrl = null;
+
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await axios.post("http://localhost:5000/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        fileUrl = res.data.url;
+      } catch (error) {
+        console.error("Fayl yuklashda xatolik", error);
+      }
+    }
+
+    socket.emit("sendMessage", {
+      group: "General",
+      message,
+      type: file ? "media" : "text",
+      media: fileUrl,
+    });
+
+    setMessage("");
+    setFile(null);
+  };
+
+  const deleteMessage = (id) => {
+    socket.emit("deleteMessage", { group: "General", id });
+  };
+
+  const editMessage = () => {
+    if (editId && editText) {
+      socket.emit("editMessage", { group: "General", id: editId, newMessage: editText });
+      setEditId(null);
+      setEditText("");
+    }
+  };
+
+  return (
+    <div style={{ textAlign: "center", padding: "20px" }}>
+      <h2>💬 Chat</h2>
+
+      <input
+        type="text"
+        placeholder="Ismingiz"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+      />
+      <button onClick={() => socket.emit("updateProfile", { username })}>🔄 Profilni yangilash</button>
+
+      <div style={{ height: "300px", overflowY: "auto", background: "#f1f1f1" }}>
+        {messages.map((msg) => (
+          <div key={msg.id} style={{ margin: "5px", padding: "10px", background: "#fff" }}>
+            <strong>{msg.user.username}:</strong> {msg.message}
+            {msg.media && (
+              msg.media.endsWith(".mp4") ? (
+                <video src={`http://localhost:5000${msg.media}`} controls width="200px" />
+              ) : (
+                <img src={`http://localhost:5000${msg.media}`} alt="Media" width="200px" />
+              )
+            )}
+            <button onClick={() => deleteMessage(msg.id)}>🗑️ O‘chirish</button>
+            <button onClick={() => { setEditId(msg.id); setEditText(msg.message); }}>✏️ Tahrirlash</button>
+          </div>
+        ))}
+      </div>
+
+      {editId ? (
+        <div>
+          <input type="text" value={editText} onChange={(e) => setEditText(e.target.value)} />
+          <button onClick={editMessage}>✅ Saqlash</button>
+        </div>
+      ) : (
+        <>
+          <input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Xabar yozing..." />
+          <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+          <button onClick={sendMessage}>📤 Yuborish</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default App;
