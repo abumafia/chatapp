@@ -459,3 +459,84 @@ io.on("connection", (socket) => {
 server.listen(5000, () => {
   console.log("🔥 Server 5000-portda ishlamoqda...");
 });
+
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
+
+app.use(cors());
+app.use(express.json());
+
+const users = {};
+const messages = {};
+const groups = { General: { members: [], type: "group" } };
+const channels = {}; // Kanallarni saqlash
+
+io.on("connection", (socket) => {
+  console.log(`🔗 Foydalanuvchi ulandi: ${socket.id}`);
+
+  socket.on("updateProfile", (profile) => {
+    users[socket.id] = { ...profile, status: "online", isAdmin: false };
+    io.emit("updateUsers", Object.values(users));
+  });
+
+  socket.on("createChannel", ({ name, admin }) => {
+    if (!channels[name]) {
+      channels[name] = { admin, members: [], messages: [] };
+      io.emit("updateChannels", Object.keys(channels));
+    }
+  });
+
+  socket.on("joinChannel", (channel) => {
+    if (channels[channel]) {
+      channels[channel].members.push(socket.id);
+      socket.join(channel);
+      socket.emit("loadChannelMessages", channels[channel].messages);
+    }
+  });
+
+  socket.on("sendMessage", ({ group, message, type, media }) => {
+    const user = users[socket.id] || { username: "Anonim", avatar: "" };
+    
+    if (channels[group] && channels[group].admin !== user.username) {
+      return; // Faqat adminlar kanalga yozishi mumkin
+    }
+
+    const msgData = {
+      id: Date.now(),
+      user,
+      message,
+      type,
+      media,
+    };
+
+    if (channels[group]) {
+      channels[group].messages.push(msgData);
+      io.to(group).emit("receiveMessage", msgData);
+    } else {
+      groups[group].messages.push(msgData);
+      io.to(group).emit("receiveMessage", msgData);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    if (users[socket.id]) {
+      users[socket.id].status = "offline";
+      io.emit("updateUsers", Object.values(users));
+    }
+    delete users[socket.id];
+  });
+});
+
+server.listen(5000, () => {
+  console.log("🔥 Server 5000-portda ishlamoqda...");
+});
