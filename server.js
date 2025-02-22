@@ -181,3 +181,75 @@ io.on("connection", (socket) => {
 server.listen(5000, () => {
   console.log("🔥 Server 5000-portda ishlamoqda...");
 });
+
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
+
+app.use(cors());
+app.use(express.json());
+
+const users = {}; // Foydalanuvchilar (socket.id => profil)
+const messages = {}; // Xabarlar (guruh yoki kanal bo‘yicha)
+const channels = {}; // Kanallar (adminlar bilan)
+
+io.on("connection", (socket) => {
+  console.log(`🔗 Foydalanuvchi ulandi: ${socket.id}`);
+
+  // Profilni saqlash
+  socket.on("updateProfile", (profile) => {
+    users[socket.id] = profile;
+    console.log(`✅ Profil yangilandi: ${profile.username}`);
+  });
+
+  // Guruh yoki kanallarga qo‘shilish
+  socket.on("joinRoom", (room) => {
+    socket.join(room);
+    if (!messages[room]) messages[room] = [];
+    console.log(`📢 ${socket.id} ${room} guruhiga qo‘shildi`);
+  });
+
+  // Kanallar yaratish
+  socket.on("createChannel", ({ channelName, admin }) => {
+    channels[channelName] = { admin, messages: [] };
+    io.emit("channelCreated", { channelName, admin });
+  });
+
+  // Xabar yuborish (oddiy yoki ovozli)
+  socket.on("sendMessage", ({ room, message, type, audio }) => {
+    const user = users[socket.id] || { username: "Anonim", avatar: "" };
+    const msgData = {
+      id: Date.now(),
+      user,
+      message,
+      type,
+      audio,
+    };
+    messages[room].push(msgData);
+    io.to(room).emit("receiveMessage", msgData);
+  });
+
+  // Xabarni o‘chirish
+  socket.on("deleteMessage", ({ room, messageId }) => {
+    messages[room] = messages[room].filter((msg) => msg.id !== messageId);
+    io.to(room).emit("messageDeleted", messageId);
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`❌ Foydalanuvchi chiqdi: ${socket.id}`);
+    delete users[socket.id];
+  });
+});
+
+server.listen(5000, () => {
+  console.log("🔥 Server 5000-portda ishlamoqda...");
+});
