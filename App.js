@@ -382,3 +382,124 @@ function App() {
 }
 
 export default App;
+
+import React, { useState, useEffect } from "react";
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:5000");
+
+function App() {
+  const [username, setUsername] = useState("");
+  const [avatar, setAvatar] = useState("");
+  const [message, setMessage] = useState("");
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [room, setRoom] = useState("General");
+  const [darkMode, setDarkMode] = useState(false);
+  const [channels, setChannels] = useState([]);
+  const [newChannel, setNewChannel] = useState("");
+
+  useEffect(() => {
+    socket.emit("joinRoom", room);
+
+    socket.on("receiveMessage", (msg) => {
+      setMessages((prev) => [...prev, msg]);
+    });
+
+    socket.on("messageDeleted", (id) => {
+      setMessages((prev) => prev.filter((msg) => msg.id !== id));
+    });
+
+    socket.on("channelCreated", ({ channelName }) => {
+      setChannels((prev) => [...prev, channelName]);
+    });
+
+    return () => {
+      socket.off("receiveMessage");
+      socket.off("messageDeleted");
+      socket.off("channelCreated");
+    };
+  }, [room]);
+
+  const sendMessage = () => {
+    if (message.trim() || audioBlob) {
+      socket.emit("sendMessage", {
+        room,
+        message,
+        type: audioBlob ? "audio" : "text",
+        audio: audioBlob,
+      });
+      setMessage("");
+      setAudioBlob(null);
+    }
+  };
+
+  const deleteMessage = (id) => {
+    socket.emit("deleteMessage", { room, messageId: id });
+  };
+
+  const updateProfile = () => {
+    if (username.trim()) {
+      socket.emit("updateProfile", { username, avatar });
+    }
+  };
+
+  const createChannel = () => {
+    if (newChannel.trim()) {
+      socket.emit("createChannel", { channelName: newChannel, admin: username });
+      setNewChannel("");
+    }
+  };
+
+  return (
+    <div style={{
+      textAlign: "center",
+      padding: "20px",
+      background: darkMode ? "#222" : "#fff",
+      color: darkMode ? "#fff" : "#000",
+      height: "100vh"
+    }}>
+      <h2>💬 Chat</h2>
+
+      {/* Profil sozlamalari */}
+      <div>
+        <input type="text" placeholder="Ismingiz" value={username} onChange={(e) => setUsername(e.target.value)} />
+        <input type="text" placeholder="Avatar URL" value={avatar} onChange={(e) => setAvatar(e.target.value)} />
+        <button onClick={updateProfile}>🔄 Yangilash</button>
+      </div>
+
+      {/* Kanallar */}
+      <div>
+        <h3>📢 Kanallar</h3>
+        {channels.map((channel, index) => (
+          <div key={index}>{channel}</div>
+        ))}
+        <input type="text" placeholder="Yangi kanal nomi" value={newChannel} onChange={(e) => setNewChannel(e.target.value)} />
+        <button onClick={createChannel}>➕ Kanal yaratish</button>
+      </div>
+
+      {/* Xabarlar */}
+      <div style={{ height: "300px", overflowY: "auto", background: darkMode ? "#444" : "#f1f1f1" }}>
+        {messages.map((msg, index) => (
+          <div key={index} style={{ margin: "5px", padding: "10px", borderRadius: "5px", background: darkMode ? "#555" : "#fff" }}>
+            <strong>{msg.user.username}:</strong> {msg.type === "audio" ? "🎤 Audio xabar" : msg.message}
+            {msg.type === "audio" && <audio controls src={msg.audio}></audio>}
+            <button onClick={() => deleteMessage(msg.id)}>🗑</button>
+          </div>
+        ))}
+      </div>
+
+      {/* Xabar yozish */}
+      <input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Xabar yozing..." />
+      <button onClick={sendMessage}>📤 Yuborish</button>
+
+      {/* Audio yozish */}
+      <button onClick={() => setAudioBlob("sample-audio-url.mp3")}>🎙 Ovozni yozish</button>
+
+      {/* Dark Mode */}
+      <button onClick={() => setDarkMode(!darkMode)}>{darkMode ? "🌞 Light Mode" : "🌙 Dark Mode"}</button>
+    </div>
+  );
+}
+
+export default App;
