@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat App</title>
     <link rel="stylesheet" href="style.css">
-    <script defer src="/socket.io/socket.io.js"></script>
     <script defer src="script.js"></script>
 </head>
 <body>
@@ -18,11 +17,18 @@
             <input type="text" id="usernameInput" placeholder="Ismingizni kiriting...">
             <button id="joinChat">Kirish</button>
         </div>
+        <div class="profile">
+            <img id="profilePic" src="default.png" alt="Profil rasmi">
+            <input type="file" id="profilePicInput" accept="image/*">
+            <input type="text" id="editName" placeholder="Ismingiz">
+            <button id="saveProfile">Saqlash</button>
+        </div>
         <div class="chat-box" id="chatBox"></div>
         <div class="input-container">
             <input type="text" id="messageInput" placeholder="Xabar yozing..." disabled>
             <button id="sendButton" disabled>➤</button>
         </div>
     </div>
+    <script defer src="server.js"></script> 
 </body>
 </html>
