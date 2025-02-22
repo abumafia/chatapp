@@ -246,3 +246,139 @@ function App() {
 }
 
 export default App;
+
+import React, { useState, useEffect } from "react";
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:5000");
+
+function App() {
+  const [username, setUsername] = useState("");
+  const [avatar, setAvatar] = useState("");
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [room, setRoom] = useState("General");
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    socket.emit("joinRoom", room);
+
+    socket.on("receiveMessage", (msg) => {
+      setMessages((prev) => [...prev, msg]);
+    });
+
+    socket.on("messageDeleted", (id) => {
+      setMessages((prev) => prev.filter((msg) => msg.id !== id));
+    });
+
+    return () => {
+      socket.off("receiveMessage");
+      socket.off("messageDeleted");
+    };
+  }, [room]);
+
+  const sendMessage = () => {
+    if (message.trim()) {
+      socket.emit("sendMessage", {
+        room,
+        message,
+        type: "text",
+      });
+      setMessage("");
+    }
+  };
+
+  const deleteMessage = (id) => {
+    socket.emit("deleteMessage", { room, messageId: id });
+  };
+
+  const updateProfile = () => {
+    if (username.trim()) {
+      socket.emit("updateProfile", { username, avatar });
+    }
+  };
+
+  return (
+    <div style={{
+      textAlign: "center",
+      padding: "20px",
+      background: darkMode ? "#222" : "#fff",
+      color: darkMode ? "#fff" : "#000",
+      height: "100vh"
+    }}>
+      <h2>💬 Chat</h2>
+
+      {/* Profil sozlamalari */}
+      <div>
+        <input
+          type="text"
+          placeholder="Ismingizni kiriting..."
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          style={{ padding: "10px", marginBottom: "10px" }}
+        />
+        <input
+          type="text"
+          placeholder="Avatar URL..."
+          value={avatar}
+          onChange={(e) => setAvatar(e.target.value)}
+          style={{ padding: "10px", marginLeft: "5px" }}
+        />
+        <button onClick={updateProfile} style={{ padding: "10px", marginLeft: "5px" }}>🔄 Yangilash</button>
+      </div>
+
+      {/* Guruhlar */}
+      <select value={room} onChange={(e) => setRoom(e.target.value)} style={{ padding: "10px", marginBottom: "10px" }}>
+        <option value="General">General</option>
+        <option value="Tech">Tech</option>
+        <option value="Sports">Sports</option>
+      </select>
+
+      {/* Xabarlar */}
+      <div style={{
+        height: "300px",
+        overflowY: "auto",
+        border: "1px solid #ccc",
+        padding: "10px",
+        background: darkMode ? "#444" : "#f1f1f1"
+      }}>
+        {messages.map((msg, index) => (
+          <div key={index} style={{
+            margin: "5px",
+            padding: "10px",
+            borderRadius: "5px",
+            background: darkMode ? "#555" : "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              {msg.user.avatar && <img src={msg.user.avatar} alt="Avatar" style={{ width: "30px", borderRadius: "50%", marginRight: "10px" }} />}
+              <strong>{msg.user.username}:</strong> <span> {msg.message}</span>
+            </div>
+            <button onClick={() => deleteMessage(msg.id)} style={{ padding: "5px", background: "red", color: "#fff", border: "none", borderRadius: "5px" }}>🗑</button>
+          </div>
+        ))}
+      </div>
+
+      {/* Xabar yozish */}
+      <input
+        type="text"
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        placeholder="Xabar yozing..."
+        style={{ padding: "10px", width: "60%", marginTop: "10px" }}
+      />
+      <button onClick={sendMessage} style={{ padding: "10px", marginLeft: "5px" }}>📤 Yuborish</button>
+
+      {/* Dark Mode */}
+      <div>
+        <button onClick={() => setDarkMode(!darkMode)} style={{ padding: "10px", marginTop: "10px" }}>
+          {darkMode ? "🌞 Light Mode" : "🌙 Dark Mode"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default App;
